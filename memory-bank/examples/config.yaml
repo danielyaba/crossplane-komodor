@@ -11,7 +11,7 @@ metadata:
     # This secret contains your Komodor API key under the key 'api-key'.
 type: Opaque
 data:
-  apiKey: $KOMODOR_API_KEY
+  api-key: <BASE64ENCODED_KOMODOR_API_KEY>
 ---
 apiVersion: komodor.crossplane.io/v1alpha1
 kind: ProviderConfig
@@ -23,4 +23,4 @@ spec:
     secretRef:
       namespace: crossplane-system
       name: komodor-api-key
-      key: apiKey
+      key: api-key

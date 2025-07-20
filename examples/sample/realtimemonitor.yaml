@@ -1,0 +1,64 @@
+# Example: Real-world Komodor Real Time Monitor
+---
+apiVersion: komodor.komodor.crossplane.io/v1alpha1
+kind: RealtimeMonitor
+metadata:
+  name: my-app-monitor
+spec:
+  providerConfigRef:
+    name: komodor-provider
+  forProvider:
+    name: "my-app"
+    active: true
+    type: "availability"
+    sensors:
+      - cluster: "my-cluster"
+        exclude: {}
+        labels:
+          - "team:Mars"
+    sinks:
+      slack:
+        - "my-app-alerts"
+    sinksOptions:
+      notifyOn:
+        - "Creating/Initializing"
+        - "Scheduling"
+        - "Container Creation"
+        - "NonZeroExitCode"
+        - "Unhealthy - failed probes"
+        - "OOMKilled"
+        - "Image"
+        - "BackOff"
+    variables:
+      categories:
+        - "Creating/Initializing"
+        - "Scheduling"
+        - "Container Creation"
+        - "NonZeroExitCode"
+        - "Unhealthy - failed probes"
+        - "OOMKilled"
+        - "Image"
+        - "BackOff"
+      duration: 300
+      minAvailable: "85%"
+
+# Example: Minimal RealtimeMonitor (only required fields)
+---
+apiVersion: komodor.komodor.crossplane.io/v1alpha1
+kind: RealtimeMonitor
+metadata:
+  name: minimal-monitor
+spec:
+  providerConfigRef:
+    name: komodor-provider
+  forProvider:
+    name: Minimal Monitor
+    active: true
+    type: availability
+    sensors:
+      - cluster: "my-cluster"
+        labels:
+          - "app:myapp"
+    sinks:
+      slack:
+        - "alerts" 

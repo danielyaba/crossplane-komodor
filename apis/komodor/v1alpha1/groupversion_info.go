@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 contains the core resources of the Komodor provider.
+// Package v1alpha1 contains the v1alpha1 group Sample resources of the Komodor provider.
 // +kubebuilder:object:generate=true
-// +groupName=komodor.crossplane.io
+// +groupName=komodor.komodor.crossplane.io
 // +versionName=v1alpha1
 package v1alpha1
 
@@ -27,7 +27,7 @@ import (
 
 // Package type metadata.
 const (
-	Group   = "komodor.crossplane.io"
+	Group   = "komodor.komodor.crossplane.io"
 	Version = "v1alpha1"
 )
 

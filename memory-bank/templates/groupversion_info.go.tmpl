@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 contains the core resources of the Komodor provider.
+// Package v1alpha1 contains the v1alpha1 group Sample resources of the {{ .Env.PROVIDER }} provider.
 // +kubebuilder:object:generate=true
-// +groupName=komodor.crossplane.io
-// +versionName=v1alpha1
-package v1alpha1
+// +groupName={{ .Env.GROUP | strings.ToLower }}.{{ .Env.PROVIDER | strings.ToLower }}.crossplane.io
+// +versionName={{ .Env.APIVERSION | strings.ToLower }}
+package {{ .Env.APIVERSION | strings.ToLower }}
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -27,8 +27,8 @@ import (
 
 // Package type metadata.
 const (
-	Group   = "komodor.crossplane.io"
-	Version = "v1alpha1"
+	Group   = "{{ .Env.GROUP | strings.ToLower }}.{{ .Env.PROVIDER | strings.ToLower }}.crossplane.io"
+	Version = "{{ .Env.APIVERSION | strings.ToLower }}"
 )
 
 var (

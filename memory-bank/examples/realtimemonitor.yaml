@@ -1,0 +1,66 @@
+# Example 1: Minimal RealtimeMonitor (only required fields)
+---
+apiVersion: komodor.komodor.crossplane.io/v1alpha1
+kind: RealtimeMonitor
+metadata:
+  name: minimal-monitor
+spec:
+  providerConfigRef:
+    name: komodor-provider
+  forProvider:
+    name: "Minimal Monitor"
+    sensors:
+      # At least one sensor is required. Replace with your actual sensor config.
+      - {
+          "type": "kubernetes",
+          "config": {"namespace": "default", "event": "PodCreated"}
+        }
+    sinks:
+      # Replace with your actual sinks config.
+      type: "slack"
+      channel: "#alerts"
+    active: true
+    type: "kubernetes"
+
+# Example 2: Full RealtimeMonitor (all fields, including optional)
+---
+apiVersion: komodor.komodor.crossplane.io/v1alpha1
+kind: RealtimeMonitor
+metadata:
+  name: full-monitor
+spec:
+  providerConfigRef:
+    name: komodor-provider
+  forProvider:
+    name: "Full Monitor Example"
+    sensors:
+      - {
+          "type": "kubernetes",
+          "config": {
+            "condition": "availableReplicasPercentage < 70",
+            "durationSeconds": 300,
+            "categories": [
+              "NonZeroExitCode",
+              "Unhealthy - failed probes",
+              "OOMKilled",
+              "Creating/Initializing",
+              "BackOff"
+            ]
+          }
+        }
+    sinks:
+      type: "slack"
+      channel: "#prod-alerts"
+      notify: true
+    active: false  # Optional, defaults to true if omitted
+    type: "custom"
+    variables:
+      threshold: 70
+      duration: 300
+    sinksOptions:
+      notifyOn:
+        - "failure"
+        - "recovery"
+      escalateTo:
+        - "oncall"
+        - "manager" 
