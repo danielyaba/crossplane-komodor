@@ -1,0 +1,41 @@
+apiVersion: komodor.komodor.crossplane.io/v1alpha1
+kind: RealtimeMonitor
+metadata:
+  name: example-monitor
+  annotations:
+    crossplane.io/external-name: ""
+spec:
+  providerConfigRef:
+    name: crossplane-komodor
+  forProvider:
+    name: "Example Monitor"
+    type: availability
+    sensors:
+    - cluster: "example-cluster"
+      labels:
+      - "app:example-app"
+    sinks:
+      slack:
+      - "example-alerts"
+    sinksOptions:
+      notifyOn:
+      - "Creating/Initializing"
+      - "Scheduling"
+      - "Container Creation"
+      - "NonZeroExitCode"
+      - "Unhealthy - failed probes"
+      - "OOMKilled"
+      - "Image"
+      - "BackOff"
+    variables:
+      categories:
+      - "Creating/Initializing"
+      - "Scheduling"
+      - "Container Creation"
+      - "NonZeroExitCode"
+      - "Unhealthy - failed probes"
+      - "OOMKilled"
+      - "Image"
+      - "BackOff"
+      duration: 300
+      minAvailable: "85%" 
