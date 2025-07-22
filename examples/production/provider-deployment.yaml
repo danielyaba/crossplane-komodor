@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crossplane-komodor
+  namespace: crossplane-system
+  labels:
+    app: crossplane-komodor
+    tier: provider
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crossplane-komodor
+  template:
+    metadata:
+      labels:
+        app: crossplane-komodor
+    spec:
+      serviceAccountName: crossplane
+      containers:
+      - name: provider
+        image: crossplane-komodor:enhanced-400-handling
+        imagePullPolicy: IfNotPresent
+        args:
+        - --debug
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+        # Health checks removed - Crossplane providers don't expose these endpoints by default
+        ports:
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      terminationGracePeriodSeconds: 30
+# Using default crossplane service account instead of custom one
+# RBAC is defined in examples/production/rbac.yaml 

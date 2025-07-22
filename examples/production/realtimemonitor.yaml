@@ -1,0 +1,25 @@
+apiVersion: komodor.komodor.crossplane.io/v1alpha1
+kind: RealtimeMonitor
+metadata:
+  name: production-app-monitor
+  namespace: default
+  annotations:
+    crossplane.io/external-name: ""  # Will be set by the provider after creation
+spec:
+  forProvider:
+    name: "Production App Monitor"
+    description: "Monitor for production application health and performance"
+    query: |
+      {
+        "query": "avg(rate(http_requests_total{app=\"production-app\"}[5m]))",
+        "threshold": 10,
+        "operator": ">"
+      }
+    severity: "critical"
+    enabled: true
+    tags:
+      - "production"
+      - "critical"
+      - "app-health"
+  providerConfigRef:
+    name: komodor-provider-config 

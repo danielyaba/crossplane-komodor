@@ -1,0 +1,72 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CODE_OF_CONDUCT.md
+OWNERS.md
+LICENSE
+DCO
+PROVIDER_CHECKLIST.md
+renovate.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts (we'll build fresh)
+dist/
+build/
+
+# Test files and coverage
+*.test
+*_test.go
+coverage.out
+coverage.html
+
+# Go module files (not needed for build)
+go.sum
+
+# Examples and samples (not needed for build)
+examples/
+cluster/local/
+
+# Memory bank and docs (not needed for build)
+memory-bank/
+
+# Package files (not needed for build)
+package/
+
+# Hack scripts (not needed for build)
+hack/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Docker files (except the one we need)
+Dockerfile*
+!cluster/images/provider-komodor/Dockerfile
+
+# Kubernetes manifests (not needed for build)
+*.yaml
+*.yml
+!cluster/images/provider-komodor/Dockerfile
+
+# Development tools
+Makefile 

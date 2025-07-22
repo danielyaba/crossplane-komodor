@@ -1,0 +1,12 @@
+apiVersion: komodor.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: crossplane-komodor
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: komodor-api-key
+      key: apiKey 
+---

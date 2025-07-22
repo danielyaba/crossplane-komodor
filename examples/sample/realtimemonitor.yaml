@@ -4,61 +4,63 @@ apiVersion: komodor.komodor.crossplane.io/v1alpha1
 kind: RealtimeMonitor
 metadata:
   name: my-app-monitor
+  annotations:
+    crossplane.io/external-name: ""
 spec:
   providerConfigRef:
-    name: komodor-provider
+    name: komodor-provider-config
   forProvider:
-    name: "my-app"
-    active: true
-    type: "availability"
+    name: my-app
+    # active: true
+    type: availability
     sensors:
-      - cluster: "my-cluster"
-        exclude: {}
+      - cluster: dev-eks
+        # exclude: {}
         labels:
-          - "team:Mars"
+          - app:my-app
     sinks:
       slack:
-        - "my-app-alerts"
+        - my-app-alerts
     sinksOptions:
       notifyOn:
-        - "Creating/Initializing"
-        - "Scheduling"
-        - "Container Creation"
-        - "NonZeroExitCode"
-        - "Unhealthy - failed probes"
-        - "OOMKilled"
-        - "Image"
-        - "BackOff"
+        - Creating/Initializing
+        - Scheduling
+        - Container Creation
+        - NonZeroExitCode
+        - Unhealthy - failed probes
+        - OOMKilled
+        - Image
+        - BackOff
     variables:
       categories:
-        - "Creating/Initializing"
-        - "Scheduling"
-        - "Container Creation"
-        - "NonZeroExitCode"
-        - "Unhealthy - failed probes"
-        - "OOMKilled"
-        - "Image"
-        - "BackOff"
+        - Creating/Initializing
+        - Scheduling
+        - Container Creation
+        - NonZeroExitCode
+        - Unhealthy - failed probes
+        - OOMKilled
+        - Image
+        - BackOff
       duration: 300
-      minAvailable: "85%"
+      minAvailable: 85%
 
 # Example: Minimal RealtimeMonitor (only required fields)
 ---
-apiVersion: komodor.komodor.crossplane.io/v1alpha1
-kind: RealtimeMonitor
-metadata:
-  name: minimal-monitor
-spec:
-  providerConfigRef:
-    name: komodor-provider
-  forProvider:
-    name: Minimal Monitor
-    active: true
-    type: availability
-    sensors:
-      - cluster: "my-cluster"
-        labels:
-          - "app:myapp"
-    sinks:
-      slack:
-        - "alerts" 
+# apiVersion: komodor.komodor.crossplane.io/v1alpha1
+# kind: RealtimeMonitor
+# metadata:
+#   name: minimal-monitor
+# spec:
+#   providerConfigRef:
+#     name: komodor-provider
+#   forProvider:
+#     name: "Minimal Monitor"
+#     active: true
+#     type: "availability"
+#     sensors:
+#       - cluster: "YOUR_ACTUAL_CLUSTER_NAME"  # Replace with your actual cluster name from Komodor
+#         labels:
+#           - "app:myapp"
+#     sinks:
+#       slack:
+#         - "alerts" 

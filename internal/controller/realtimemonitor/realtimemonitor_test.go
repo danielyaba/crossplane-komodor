@@ -51,15 +51,31 @@ func (m *mockClient) GetMonitor(ctx context.Context, id string) (*komodorclient.
 	return m.getMonitorFn(ctx, id)
 }
 
+func (m *mockClient) ListMonitors(ctx context.Context) ([]komodorclient.Monitor, error) {
+	return nil, nil
+}
+
 // Implement other methods as no-ops for interface compliance
+
+
+func (m *mockClient) ListClusters(ctx context.Context) ([]komodorclient.Cluster, error) {
+	return nil, nil
+}
+
 func (m *mockClient) CreateMonitor(ctx context.Context, monitor *komodorclient.Monitor) (*komodorclient.Monitor, error) {
 	return nil, nil
 }
+
 func (m *mockClient) UpdateMonitor(ctx context.Context, id string, monitor *komodorclient.Monitor) (*komodorclient.Monitor, error) {
 	return nil, nil
 }
+
 func (m *mockClient) DeleteMonitor(ctx context.Context, id string) error {
 	return nil
+}
+
+func (m *mockClient) ValidateCluster(ctx context.Context, clusterName string) (bool, error) {
+	return true, nil
 }
 
 func TestObserve(t *testing.T) {

@@ -19,7 +19,10 @@ package realtimemonitor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"regexp"
+	"strings"
 
 	"github.com/crossplane/crossplane-runtime/pkg/feature"
 
@@ -27,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
@@ -57,9 +61,12 @@ const (
 // Define KomodorClient interface for testability
 type KomodorClient interface {
 	GetMonitor(ctx context.Context, id string) (*komodorclient.Monitor, error)
+	ListMonitors(ctx context.Context) ([]komodorclient.Monitor, error)
+	ListClusters(ctx context.Context) ([]komodorclient.Cluster, error)
 	CreateMonitor(ctx context.Context, monitor *komodorclient.Monitor) (*komodorclient.Monitor, error)
 	UpdateMonitor(ctx context.Context, id string, monitor *komodorclient.Monitor) (*komodorclient.Monitor, error)
 	DeleteMonitor(ctx context.Context, id string) error
+	ValidateCluster(ctx context.Context, clusterName string) (bool, error)
 }
 
 // A NoOpService does nothing.
@@ -264,49 +271,134 @@ func isMonitorUpToDate(spec *v1alpha1.RealtimeMonitorParameters, monitor *komodo
 		reflect.DeepEqual(spec.SinksOptions, monitor.SinksOptions)
 }
 
+// isValidUUID checks if a string is a valid UUID format
+func isValidUUID(uuid string) bool {
+	uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	return uuidRegex.MatchString(uuid)
+}
+
 // Helper: Handle error from Komodor GetMonitor
 func handleGetMonitorError(cr *v1alpha1.RealtimeMonitor, extName string, err error) (managed.ExternalObservation, error) {
+	logger := log.FromContext(context.Background())
+
+	// Check if this is a 404 Not Found error
 	if komodorclient.IsNotFound(err) {
+		logger.Info("Monitor not found in Komodor (404)", "monitorID", extName)
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
+	// Check if this is a 400 Bad Request with an invalid external name (not a UUID)
+	// This happens when Crossplane automatically sets external-name to the Kubernetes resource name
+	if strings.Contains(err.Error(), "400 Bad Request") {
+		if !isValidUUID(extName) {
+			logger.Info("400 Bad Request with invalid external name (not UUID), clearing external name to trigger creation",
+				"externalName", extName,
+				"resourceName", cr.Name)
+			// Clear the incorrect external name to allow recreation
+			meta.SetExternalName(cr, "")
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		} else {
+			// Valid UUID but still getting 400 - this might be a different issue
+			logger.Error(err, "400 Bad Request with valid UUID - this might indicate a different issue",
+				"externalName", extName,
+				"resourceName", cr.Name)
+		}
+	}
+
+	// For other errors, set reconcile error condition
+	logger.Error(err, "Unexpected error getting monitor from Komodor",
+		"externalName", extName,
+		"resourceName", cr.Name)
 	cr.SetConditions(xpv1.ReconcileError(errors.Wrap(err, "cannot get monitor from Komodor")))
 	return managed.ExternalObservation{}, errors.Wrapf(err, "failed to get monitor %q from Komodor", extName)
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
+	logger := log.FromContext(ctx)
+
 	cr, ok := mg.(*v1alpha1.RealtimeMonitor)
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotRealtimeMonitor)
 	}
 
-	// If no external name, resource does not exist
-	extName := meta.GetExternalName(cr)
-	if extName == "" {
+	logger.Info("Observing RealtimeMonitor",
+		"name", cr.Name,
+		"namespace", cr.Namespace,
+		"externalName", meta.GetExternalName(cr))
+
+	// Get the monitor ID from external-name annotation
+	monitorID := meta.GetExternalName(cr)
+	if monitorID == "" {
+		logger.Info("No external name found, resource does not exist")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	monitor, err := c.client.GetMonitor(ctx, extName)
+	// Validate external name format before making API call
+	// This prevents unnecessary 400 Bad Request errors when Crossplane sets invalid external names
+	if !isValidUUID(monitorID) {
+		logger.Info("External name is not a valid UUID, clearing it to trigger creation",
+			"externalName", monitorID,
+			"resourceName", cr.Name)
+		meta.SetExternalName(cr, "")
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
+	logger.Info("Fetching monitor from Komodor", "monitorID", monitorID)
+	monitor, err := c.client.GetMonitor(ctx, monitorID)
 	if err != nil {
-		return handleGetMonitorError(cr, extName, err)
+		logger.Error(err, "Failed to get monitor from Komodor", "monitorID", monitorID)
+		return handleGetMonitorError(cr, monitorID, err)
+	}
+
+	logger.Info("Successfully fetched monitor from Komodor",
+		"monitorID", monitorID,
+		"monitorName", monitor.Name,
+		"isDeleted", monitor.IsDeleted)
+
+	// If monitor is marked as deleted, treat it as non-existent
+	if monitor.IsDeleted {
+		logger.Info("Monitor is marked as deleted, treating as non-existent", "monitorID", monitorID)
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
 	specSensors, err := unmarshalSensors(cr.Spec.ForProvider.Sensors)
 	if err != nil {
+		logger.Error(err, "Failed to unmarshal spec sensors")
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to unmarshal spec sensors")
 	}
 	specSinks, err := unmarshalMap(cr.Spec.ForProvider.Sinks)
 	if err != nil {
+		logger.Error(err, "Failed to unmarshal spec sinks")
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to unmarshal spec sinks")
 	}
 	specVariables, err := unmarshalMap(cr.Spec.ForProvider.Variables)
 	if err != nil {
+		logger.Error(err, "Failed to unmarshal spec variables")
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to unmarshal spec variables")
 	}
 
 	resourceUpToDate := isMonitorUpToDate(&cr.Spec.ForProvider, monitor, specSensors, specSinks, specVariables)
+	logger.Info("Monitor comparison completed",
+		"monitorID", monitorID,
+		"resourceUpToDate", resourceUpToDate)
 
 	if err := updateStatusFromMonitor(cr, monitor); err != nil {
+		logger.Error(err, "Failed to update status from monitor")
 		return managed.ExternalObservation{}, err
+	}
+
+	logger.Info("Observe completed successfully",
+		"monitorID", monitorID,
+		"resourceExists", true,
+		"resourceUpToDate", resourceUpToDate)
+
+	// Set READY and SYNCED conditions when monitor exists and is up-to-date
+	if resourceUpToDate {
+		cr.SetConditions(xpv1.Available(), xpv1.ReconcileSuccess())
+		logger.Info("Monitor is up-to-date, set READY and SYNCED conditions to True", "monitorID", monitorID)
+	} else {
+		cr.SetConditions(xpv1.Available())
+		logger.Info("Monitor exists but needs update, set READY condition to True", "monitorID", monitorID)
 	}
 
 	return managed.ExternalObservation{
@@ -316,21 +408,71 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 }
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
+	logger := log.FromContext(ctx)
+
 	cr, ok := mg.(*v1alpha1.RealtimeMonitor)
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotRealtimeMonitor)
 	}
 
-	sensors, err := unmarshalSensors(cr.Spec.ForProvider.Sensors)
+	logger.Info("Creating RealtimeMonitor",
+		"name", cr.Name,
+		"namespace", cr.Namespace,
+		"monitorName", cr.Spec.ForProvider.Name)
+
+	// CRITICAL VALIDATION: Check if the cluster exists in Komodor
+	// This prevents creating monitors for non-existent clusters
+	logger.Info("Validating cluster existence in Komodor")
+
+	// Extract cluster names from sensors
+	var clusterNames []string
+	specSensors, err := unmarshalSensors(cr.Spec.ForProvider.Sensors)
 	if err != nil {
+		logger.Error(err, "Failed to unmarshal spec sensors for cluster validation")
 		return managed.ExternalCreation{}, errors.Wrap(err, "failed to unmarshal spec sensors")
 	}
+
+	for _, sensor := range specSensors {
+		if cluster, ok := sensor["cluster"].(string); ok && cluster != "" {
+			clusterNames = append(clusterNames, cluster)
+		}
+	}
+
+	// Validate each cluster
+	for _, clusterName := range clusterNames {
+		logger.Info("Validating cluster", "clusterName", clusterName)
+		clusterExists, err := c.client.ValidateCluster(ctx, clusterName)
+		if err != nil {
+			logger.Error(err, "Failed to validate cluster", "clusterName", clusterName)
+			cr.SetConditions(xpv1.ReconcileError(errors.Wrapf(err, "cannot validate cluster %s", clusterName)))
+			return managed.ExternalCreation{}, errors.Wrapf(err, "cannot validate cluster %s", clusterName)
+		}
+
+		if !clusterExists {
+			errorMsg := fmt.Sprintf("cluster '%s' does not exist in Komodor. Monitors for non-existent clusters will not be visible in the Komodor UI", clusterName)
+			logger.Error(errors.New(errorMsg), "Cluster validation failed", "clusterName", clusterName)
+			cr.SetConditions(xpv1.ReconcileError(errors.New(errorMsg)))
+			return managed.ExternalCreation{}, errors.New(errorMsg)
+		}
+
+		logger.Info("Cluster validation successful", "clusterName", clusterName)
+	}
+
+	// NOTE: Komodor allows multiple monitors with the same name
+	// Each monitor has a unique ID, so we always create a new monitor
+	// when requested, regardless of name duplicates
+	logger.Info("Proceeding with monitor creation", "monitorName", cr.Spec.ForProvider.Name)
+
+	// Use the already unmarshaled sensors from cluster validation
+	sensors := specSensors
 	sinks, err := unmarshalMap(cr.Spec.ForProvider.Sinks)
 	if err != nil {
+		logger.Error(err, "Failed to unmarshal spec sinks")
 		return managed.ExternalCreation{}, errors.Wrap(err, "failed to unmarshal spec sinks")
 	}
 	variables, err := unmarshalMap(cr.Spec.ForProvider.Variables)
 	if err != nil {
+		logger.Error(err, "Failed to unmarshal spec variables")
 		return managed.ExternalCreation{}, errors.Wrap(err, "failed to unmarshal spec variables")
 	}
 
@@ -344,18 +486,30 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		SinksOptions: cr.Spec.ForProvider.SinksOptions,
 	}
 
+	logger.Info("Sending create request to Komodor",
+		"monitorName", monitor.Name,
+		"monitorType", monitor.Type)
+
 	created, err := c.client.CreateMonitor(ctx, monitor)
 	if err != nil {
+		logger.Error(err, "Failed to create monitor in Komodor", "monitorName", monitor.Name)
 		cr.SetConditions(xpv1.ReconcileError(errors.Wrap(err, "cannot create monitor in Komodor")))
 		return managed.ExternalCreation{}, errors.Wrap(err, "cannot create monitor in Komodor")
 	}
 
+	logger.Info("Successfully created monitor in Komodor",
+		"monitorID", created.ID,
+		"monitorName", created.Name)
+
+	// Set external-name to the Komodor monitor ID
 	meta.SetExternalName(cr, created.ID)
 
 	if err := updateStatusFromMonitor(cr, created); err != nil {
+		logger.Error(err, "Failed to update status from created monitor")
 		return managed.ExternalCreation{}, err
 	}
 
+	logger.Info("Create completed successfully", "monitorID", created.ID)
 	return managed.ExternalCreation{}, nil
 }
 
@@ -365,8 +519,9 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotRealtimeMonitor)
 	}
 
-	extName := meta.GetExternalName(cr)
-	if extName == "" {
+	// Get the monitor ID from external-name annotation
+	monitorID := meta.GetExternalName(cr)
+	if monitorID == "" {
 		return managed.ExternalUpdate{}, errors.New("external name (monitor ID) is not set")
 	}
 
@@ -393,7 +548,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		SinksOptions: cr.Spec.ForProvider.SinksOptions,
 	}
 
-	updated, err := c.client.UpdateMonitor(ctx, extName, monitor)
+	updated, err := c.client.UpdateMonitor(ctx, monitorID, monitor)
 	if err != nil {
 		cr.SetConditions(xpv1.ReconcileError(errors.Wrap(err, "cannot update monitor in Komodor")))
 		return managed.ExternalUpdate{}, errors.Wrap(err, "cannot update monitor in Komodor")
@@ -407,21 +562,32 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 }
 
 func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
+	logger := log.FromContext(ctx)
+
 	cr, ok := mg.(*v1alpha1.RealtimeMonitor)
 	if !ok {
 		return managed.ExternalDelete{}, errors.New(errNotRealtimeMonitor)
 	}
 
+	logger.Info("Deleting RealtimeMonitor",
+		"name", cr.Name,
+		"namespace", cr.Namespace)
+
 	extName := meta.GetExternalName(cr)
 	if extName == "" {
+		logger.Error(errors.New("external name not set"), "Cannot delete monitor without external name")
 		return managed.ExternalDelete{}, errors.New("external name (monitor ID) is not set")
 	}
 
+	logger.Info("Sending delete request to Komodor", "monitorID", extName)
+
 	if err := c.client.DeleteMonitor(ctx, extName); err != nil {
+		logger.Error(err, "Failed to delete monitor in Komodor", "monitorID", extName)
 		cr.SetConditions(xpv1.ReconcileError(errors.Wrap(err, "cannot delete monitor in Komodor")))
 		return managed.ExternalDelete{}, errors.Wrap(err, "cannot delete monitor in Komodor")
 	}
 
+	logger.Info("Successfully deleted monitor in Komodor", "monitorID", extName)
 	return managed.ExternalDelete{}, nil
 }
 

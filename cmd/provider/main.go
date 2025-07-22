@@ -19,7 +19,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -74,15 +73,15 @@ func main() {
 
 	zl := zap.New(zap.UseDevMode(*debug))
 	log := logging.NewLogrLogger(zl.WithName("provider-komodor"))
+	
+	// Always set a proper logger for controller-runtime to ensure our logs are visible
+	// Use info level by default, debug level when debug flag is set
 	if *debug {
-		// The controller-runtime is *very* verbose even at info level, so we only
-		// provide it a real logger when we're running in debug mode.
 		ctrl.SetLogger(zl)
 	} else {
-		// Setting the controller-runtime logger to a no-op logger by default. This
-		// is not really needed, but otherwise we get a warning from the
-		// controller-runtime.
-		ctrl.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+		// Use info level logger instead of discarding logs
+		infoLogger := zap.New(zap.UseDevMode(false))
+		ctrl.SetLogger(infoLogger)
 	}
 
 	cfg, err := ctrl.GetConfig()
