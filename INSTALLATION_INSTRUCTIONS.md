@@ -40,6 +40,6 @@ kubectl get realtimemonitors
 
 ## Image Details
 
-- **Image**: docker.io/danielyaba/provider-komodor:v1.0.0
+- **Image**: docker.io/danielyaba/crossplane-komodor:v1.0.0
 - **Platform**: linux_arm64,linux_amd64
 - **Version**: v1.0.0

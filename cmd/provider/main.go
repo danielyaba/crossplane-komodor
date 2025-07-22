@@ -73,7 +73,7 @@ func main() {
 
 	zl := zap.New(zap.UseDevMode(*debug))
 	log := logging.NewLogrLogger(zl.WithName("provider-komodor"))
-	
+
 	// Always set a proper logger for controller-runtime to ensure our logs are visible
 	// Use info level by default, debug level when debug flag is set
 	if *debug {

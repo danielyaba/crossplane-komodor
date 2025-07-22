@@ -57,7 +57,6 @@ func (m *mockClient) ListMonitors(ctx context.Context) ([]komodorclient.Monitor,
 
 // Implement other methods as no-ops for interface compliance
 
-
 func (m *mockClient) ListClusters(ctx context.Context) ([]komodorclient.Cluster, error) {
 	return nil, nil
 }
@@ -125,7 +124,7 @@ func TestObserve(t *testing.T) {
 			reason: "If all fields match, resource is up to date.",
 			fields: fields{client: &mockClient{getMonitorFn: func(ctx context.Context, id string) (*komodorclient.Monitor, error) {
 				return &komodorclient.Monitor{
-					ID:           "abc123",
+					ID:           "12345678-1234-1234-1234-123456789abc",
 					Name:         "foo",
 					Sensors:      []map[string]interface{}{{"a": float64(1)}},
 					Sinks:        map[string]interface{}{"b": float64(2)},
@@ -139,7 +138,7 @@ func TestObserve(t *testing.T) {
 				ctx: context.TODO(),
 				mg: &v1alpha1.RealtimeMonitor{
 					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{"crossplane.io/external-name": "abc123"},
+						Annotations: map[string]string{"crossplane.io/external-name": "12345678-1234-1234-1234-123456789abc"},
 					},
 					Spec: v1alpha1.RealtimeMonitorSpec{
 						ForProvider: v1alpha1.RealtimeMonitorParameters{
@@ -167,7 +166,7 @@ func TestObserve(t *testing.T) {
 			reason: "If any field differs, resource is not up to date.",
 			fields: fields{client: &mockClient{getMonitorFn: func(ctx context.Context, id string) (*komodorclient.Monitor, error) {
 				return &komodorclient.Monitor{
-					ID:           "abc123",
+					ID:           "12345678-1234-1234-1234-123456789abc",
 					Name:         "foo",
 					Sensors:      []map[string]interface{}{{"a": float64(2)}}, // different value
 					Sinks:        map[string]interface{}{"b": float64(2)},
@@ -181,7 +180,7 @@ func TestObserve(t *testing.T) {
 				ctx: context.TODO(),
 				mg: &v1alpha1.RealtimeMonitor{
 					ObjectMeta: metav1.ObjectMeta{
-						Annotations: map[string]string{"crossplane.io/external-name": "abc123"},
+						Annotations: map[string]string{"crossplane.io/external-name": "12345678-1234-1234-1234-123456789abc"},
 					},
 					Spec: v1alpha1.RealtimeMonitorSpec{
 						ForProvider: v1alpha1.RealtimeMonitorParameters{

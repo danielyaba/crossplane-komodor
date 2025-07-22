@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/crossplane/crossplane-runtime/pkg/feature"
+	"github.com/go-logr/logr"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -277,9 +278,144 @@ func isValidUUID(uuid string) bool {
 	return uuidRegex.MatchString(uuid)
 }
 
+// Helper struct for spec data
+type specData struct {
+	sensors   []map[string]interface{}
+	sinks     map[string]interface{}
+	variables map[string]interface{}
+}
+
+// Helper: Fetch monitor from Komodor
+func (c *external) fetchMonitorFromKomodor(ctx context.Context, monitorID string) (*komodorclient.Monitor, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("Fetching monitor from Komodor", "monitorID", monitorID)
+
+	monitor, err := c.client.GetMonitor(ctx, monitorID)
+	if err != nil {
+		logger.Error(err, "Failed to get monitor from Komodor", "monitorID", monitorID)
+		return nil, err
+	}
+
+	logger.Info("Successfully fetched monitor from Komodor",
+		"monitorID", monitorID,
+		"monitorName", monitor.Name,
+		"isDeleted", monitor.IsDeleted)
+
+	return monitor, nil
+}
+
+// Helper: Unmarshal spec data
+func (c *external) unmarshalSpecData(cr *v1alpha1.RealtimeMonitor) (*specData, error) {
+	specSensors, err := unmarshalSensors(cr.Spec.ForProvider.Sensors)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal spec sensors")
+	}
+
+	specSinks, err := unmarshalMap(cr.Spec.ForProvider.Sinks)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal spec sinks")
+	}
+
+	specVariables, err := unmarshalMap(cr.Spec.ForProvider.Variables)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal spec variables")
+	}
+
+	return &specData{
+		sensors:   specSensors,
+		sinks:     specSinks,
+		variables: specVariables,
+	}, nil
+}
+
+// Helper: Set observe conditions
+func (c *external) setObserveConditions(cr *v1alpha1.RealtimeMonitor, resourceUpToDate bool, monitorID string, logger logr.Logger) {
+	if resourceUpToDate {
+		cr.SetConditions(xpv1.Available(), xpv1.ReconcileSuccess())
+		logger.Info("Monitor is up-to-date, set READY and SYNCED conditions to True", "monitorID", monitorID)
+	} else {
+		cr.SetConditions(xpv1.Available())
+		logger.Info("Monitor exists but needs update, set READY condition to True", "monitorID", monitorID)
+	}
+}
+
+// Helper: Validate clusters
+func (c *external) validateClusters(ctx context.Context, specSensors []map[string]interface{}, cr *v1alpha1.RealtimeMonitor, logger logr.Logger) error {
+	var clusterNames []string
+	for _, sensor := range specSensors {
+		if cluster, ok := sensor["cluster"].(string); ok && cluster != "" {
+			clusterNames = append(clusterNames, cluster)
+		}
+	}
+
+	for _, clusterName := range clusterNames {
+		logger.Info("Validating cluster", "clusterName", clusterName)
+		clusterExists, err := c.client.ValidateCluster(ctx, clusterName)
+		if err != nil {
+			logger.Error(err, "Failed to validate cluster", "clusterName", clusterName)
+			cr.SetConditions(xpv1.ReconcileError(errors.Wrapf(err, "cannot validate cluster %s", clusterName)))
+			return errors.Wrapf(err, "cannot validate cluster %s", clusterName)
+		}
+
+		if !clusterExists {
+			errorMsg := fmt.Sprintf("cluster '%s' does not exist in Komodor. Monitors for non-existent clusters will not be visible in the Komodor UI", clusterName)
+			logger.Error(errors.New(errorMsg), "Cluster validation failed", "clusterName", clusterName)
+			cr.SetConditions(xpv1.ReconcileError(errors.New(errorMsg)))
+			return errors.New(errorMsg)
+		}
+
+		logger.Info("Cluster validation successful", "clusterName", clusterName)
+	}
+	return nil
+}
+
+// Helper: Create monitor in Komodor
+func (c *external) createMonitorInKomodor(ctx context.Context, specData *specData, cr *v1alpha1.RealtimeMonitor, logger logr.Logger) (*komodorclient.Monitor, error) {
+	monitor := &komodorclient.Monitor{
+		Name:         cr.Spec.ForProvider.Name,
+		Sensors:      specData.sensors,
+		Sinks:        specData.sinks,
+		Active:       cr.Spec.ForProvider.Active,
+		Type:         cr.Spec.ForProvider.Type,
+		Variables:    specData.variables,
+		SinksOptions: cr.Spec.ForProvider.SinksOptions,
+	}
+
+	logger.Info("Sending create request to Komodor",
+		"monitorName", monitor.Name,
+		"monitorType", monitor.Type)
+
+	created, err := c.client.CreateMonitor(ctx, monitor)
+	if err != nil {
+		logger.Error(err, "Failed to create monitor in Komodor", "monitorName", monitor.Name)
+		cr.SetConditions(xpv1.ReconcileError(errors.Wrap(err, "cannot create monitor in Komodor")))
+		return nil, errors.Wrap(err, "cannot create monitor in Komodor")
+	}
+
+	logger.Info("Successfully created monitor in Komodor",
+		"monitorID", created.ID,
+		"monitorName", created.Name)
+
+	return created, nil
+}
+
+// Helper: Update resource from created monitor
+func (c *external) updateResourceFromCreatedMonitor(cr *v1alpha1.RealtimeMonitor, created *komodorclient.Monitor, logger logr.Logger) {
+	// Set external-name to the Komodor monitor ID
+	meta.SetExternalName(cr, created.ID)
+
+	if err := updateStatusFromMonitor(cr, created); err != nil {
+		logger.Error(err, "Failed to update status from created monitor")
+		return
+	}
+
+	cr.SetConditions(xpv1.Creating(), xpv1.ReconcileSuccess())
+	logger.Info("Create completed successfully", "monitorID", created.ID)
+}
+
 // Helper: Handle error from Komodor GetMonitor
-func handleGetMonitorError(cr *v1alpha1.RealtimeMonitor, extName string, err error) (managed.ExternalObservation, error) {
-	logger := log.FromContext(context.Background())
+func handleGetMonitorError(ctx context.Context, cr *v1alpha1.RealtimeMonitor, extName string, err error) (managed.ExternalObservation, error) {
+	logger := log.FromContext(ctx)
 
 	// Check if this is a 404 Not Found error
 	if komodorclient.IsNotFound(err) {
@@ -326,15 +462,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		"namespace", cr.Namespace,
 		"externalName", meta.GetExternalName(cr))
 
-	// Get the monitor ID from external-name annotation
+	// Check if monitor exists
 	monitorID := meta.GetExternalName(cr)
 	if monitorID == "" {
 		logger.Info("No external name found, resource does not exist")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	// Validate external name format before making API call
-	// This prevents unnecessary 400 Bad Request errors when Crossplane sets invalid external names
+	// Validate external name format
 	if !isValidUUID(monitorID) {
 		logger.Info("External name is not a valid UUID, clearing it to trigger creation",
 			"externalName", monitorID,
@@ -343,63 +478,38 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	logger.Info("Fetching monitor from Komodor", "monitorID", monitorID)
-	monitor, err := c.client.GetMonitor(ctx, monitorID)
+	// Fetch monitor from Komodor
+	monitor, err := c.fetchMonitorFromKomodor(ctx, monitorID)
 	if err != nil {
-		logger.Error(err, "Failed to get monitor from Komodor", "monitorID", monitorID)
-		return handleGetMonitorError(cr, monitorID, err)
+		return handleGetMonitorError(ctx, cr, monitorID, err)
 	}
 
-	logger.Info("Successfully fetched monitor from Komodor",
-		"monitorID", monitorID,
-		"monitorName", monitor.Name,
-		"isDeleted", monitor.IsDeleted)
-
-	// If monitor is marked as deleted, treat it as non-existent
+	// Check if monitor is deleted
 	if monitor.IsDeleted {
 		logger.Info("Monitor is marked as deleted, treating as non-existent", "monitorID", monitorID)
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	specSensors, err := unmarshalSensors(cr.Spec.ForProvider.Sensors)
+	// Unmarshal spec data
+	specData, err := c.unmarshalSpecData(cr)
 	if err != nil {
-		logger.Error(err, "Failed to unmarshal spec sensors")
-		return managed.ExternalObservation{}, errors.Wrap(err, "failed to unmarshal spec sensors")
-	}
-	specSinks, err := unmarshalMap(cr.Spec.ForProvider.Sinks)
-	if err != nil {
-		logger.Error(err, "Failed to unmarshal spec sinks")
-		return managed.ExternalObservation{}, errors.Wrap(err, "failed to unmarshal spec sinks")
-	}
-	specVariables, err := unmarshalMap(cr.Spec.ForProvider.Variables)
-	if err != nil {
-		logger.Error(err, "Failed to unmarshal spec variables")
-		return managed.ExternalObservation{}, errors.Wrap(err, "failed to unmarshal spec variables")
+		return managed.ExternalObservation{}, err
 	}
 
-	resourceUpToDate := isMonitorUpToDate(&cr.Spec.ForProvider, monitor, specSensors, specSinks, specVariables)
+	// Check if monitor is up to date
+	resourceUpToDate := isMonitorUpToDate(&cr.Spec.ForProvider, monitor, specData.sensors, specData.sinks, specData.variables)
 	logger.Info("Monitor comparison completed",
 		"monitorID", monitorID,
 		"resourceUpToDate", resourceUpToDate)
 
+	// Update status from monitor
 	if err := updateStatusFromMonitor(cr, monitor); err != nil {
 		logger.Error(err, "Failed to update status from monitor")
 		return managed.ExternalObservation{}, err
 	}
 
-	logger.Info("Observe completed successfully",
-		"monitorID", monitorID,
-		"resourceExists", true,
-		"resourceUpToDate", resourceUpToDate)
-
-	// Set READY and SYNCED conditions when monitor exists and is up-to-date
-	if resourceUpToDate {
-		cr.SetConditions(xpv1.Available(), xpv1.ReconcileSuccess())
-		logger.Info("Monitor is up-to-date, set READY and SYNCED conditions to True", "monitorID", monitorID)
-	} else {
-		cr.SetConditions(xpv1.Available())
-		logger.Info("Monitor exists but needs update, set READY condition to True", "monitorID", monitorID)
-	}
+	// Set conditions based on resource state
+	c.setObserveConditions(cr, resourceUpToDate, monitorID, logger)
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
@@ -420,96 +530,28 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		"namespace", cr.Namespace,
 		"monitorName", cr.Spec.ForProvider.Name)
 
-	// CRITICAL VALIDATION: Check if the cluster exists in Komodor
-	// This prevents creating monitors for non-existent clusters
-	logger.Info("Validating cluster existence in Komodor")
-
-	// Extract cluster names from sensors
-	var clusterNames []string
-	specSensors, err := unmarshalSensors(cr.Spec.ForProvider.Sensors)
+	// Unmarshal spec data
+	specData, err := c.unmarshalSpecData(cr)
 	if err != nil {
-		logger.Error(err, "Failed to unmarshal spec sensors for cluster validation")
-		return managed.ExternalCreation{}, errors.Wrap(err, "failed to unmarshal spec sensors")
-	}
-
-	for _, sensor := range specSensors {
-		if cluster, ok := sensor["cluster"].(string); ok && cluster != "" {
-			clusterNames = append(clusterNames, cluster)
-		}
-	}
-
-	// Validate each cluster
-	for _, clusterName := range clusterNames {
-		logger.Info("Validating cluster", "clusterName", clusterName)
-		clusterExists, err := c.client.ValidateCluster(ctx, clusterName)
-		if err != nil {
-			logger.Error(err, "Failed to validate cluster", "clusterName", clusterName)
-			cr.SetConditions(xpv1.ReconcileError(errors.Wrapf(err, "cannot validate cluster %s", clusterName)))
-			return managed.ExternalCreation{}, errors.Wrapf(err, "cannot validate cluster %s", clusterName)
-		}
-
-		if !clusterExists {
-			errorMsg := fmt.Sprintf("cluster '%s' does not exist in Komodor. Monitors for non-existent clusters will not be visible in the Komodor UI", clusterName)
-			logger.Error(errors.New(errorMsg), "Cluster validation failed", "clusterName", clusterName)
-			cr.SetConditions(xpv1.ReconcileError(errors.New(errorMsg)))
-			return managed.ExternalCreation{}, errors.New(errorMsg)
-		}
-
-		logger.Info("Cluster validation successful", "clusterName", clusterName)
-	}
-
-	// NOTE: Komodor allows multiple monitors with the same name
-	// Each monitor has a unique ID, so we always create a new monitor
-	// when requested, regardless of name duplicates
-	logger.Info("Proceeding with monitor creation", "monitorName", cr.Spec.ForProvider.Name)
-
-	// Use the already unmarshaled sensors from cluster validation
-	sensors := specSensors
-	sinks, err := unmarshalMap(cr.Spec.ForProvider.Sinks)
-	if err != nil {
-		logger.Error(err, "Failed to unmarshal spec sinks")
-		return managed.ExternalCreation{}, errors.Wrap(err, "failed to unmarshal spec sinks")
-	}
-	variables, err := unmarshalMap(cr.Spec.ForProvider.Variables)
-	if err != nil {
-		logger.Error(err, "Failed to unmarshal spec variables")
-		return managed.ExternalCreation{}, errors.Wrap(err, "failed to unmarshal spec variables")
-	}
-
-	monitor := &komodorclient.Monitor{
-		Name:         cr.Spec.ForProvider.Name,
-		Sensors:      sensors,
-		Sinks:        sinks,
-		Active:       cr.Spec.ForProvider.Active,
-		Type:         cr.Spec.ForProvider.Type,
-		Variables:    variables,
-		SinksOptions: cr.Spec.ForProvider.SinksOptions,
-	}
-
-	logger.Info("Sending create request to Komodor",
-		"monitorName", monitor.Name,
-		"monitorType", monitor.Type)
-
-	created, err := c.client.CreateMonitor(ctx, monitor)
-	if err != nil {
-		logger.Error(err, "Failed to create monitor in Komodor", "monitorName", monitor.Name)
-		cr.SetConditions(xpv1.ReconcileError(errors.Wrap(err, "cannot create monitor in Komodor")))
-		return managed.ExternalCreation{}, errors.Wrap(err, "cannot create monitor in Komodor")
-	}
-
-	logger.Info("Successfully created monitor in Komodor",
-		"monitorID", created.ID,
-		"monitorName", created.Name)
-
-	// Set external-name to the Komodor monitor ID
-	meta.SetExternalName(cr, created.ID)
-
-	if err := updateStatusFromMonitor(cr, created); err != nil {
-		logger.Error(err, "Failed to update status from created monitor")
 		return managed.ExternalCreation{}, err
 	}
 
-	logger.Info("Create completed successfully", "monitorID", created.ID)
+	// Validate clusters
+	logger.Info("Validating cluster existence in Komodor")
+	if err := c.validateClusters(ctx, specData.sensors, cr, logger); err != nil {
+		return managed.ExternalCreation{}, err
+	}
+
+	// Create monitor in Komodor
+	logger.Info("Proceeding with monitor creation", "monitorName", cr.Spec.ForProvider.Name)
+	created, err := c.createMonitorInKomodor(ctx, specData, cr, logger)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
+
+	// Update resource with created monitor data
+	c.updateResourceFromCreatedMonitor(cr, created, logger)
+
 	return managed.ExternalCreation{}, nil
 }
 
