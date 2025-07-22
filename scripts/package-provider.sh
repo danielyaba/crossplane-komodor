@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 DOCKER_USERNAME=""
-PROVIDER_NAME="provider-komodor"
+PROVIDER_NAME="crossplane-komodor"
 VERSION="latest"
 PLATFORM="linux_arm64,linux_amd64"
 MULTI_PLATFORM=true

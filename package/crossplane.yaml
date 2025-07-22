@@ -11,7 +11,7 @@ metadata:
       This provider allows you to create, update, and delete monitors
       in Komodor using Kubernetes Custom Resources.
 spec:
-  package: "docker.io/danielyaba/provider-komodor:v1.0.0"
+  package: "docker.io/danielyaba/crossplane-komodor:v1.0.0"
   packagePullPolicy: IfNotPresent
   revisionActivationPolicy: Automatic
   revisionHistoryLimit: 1
