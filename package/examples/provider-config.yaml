@@ -1,7 +1,7 @@
 apiVersion: komodor.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: crossplane-komodor
+  name: example-provider-config
 spec:
   credentials:
     source: Secret
