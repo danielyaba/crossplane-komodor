@@ -8,7 +8,7 @@ metadata:
     crossplane.io/external-name: ""
 spec:
   providerConfigRef:
-    name: komodor-provider-config
+    name: crossplane-komodor
   forProvider:
     name: my-app
     # active: true

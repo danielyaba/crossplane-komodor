@@ -11,13 +11,13 @@ spec:
       name: komodor-api-secret
       key: api-key
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: komodor-api-secret
-  namespace: crossplane-system
-type: Opaque
-data:
-  # Base64 encoded Komodor API key
-  # echo -n "your-komodor-api-key" | base64
-  api-key: ""  # Replace with your actual base64 encoded API key
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: komodor-api-secret
+#   namespace: crossplane-system
+# type: Opaque
+# data:
+#   # Base64 encoded Komodor API key
+#   # echo -n "your-komodor-api-key" | base64
+#   api-key: ""  # Replace with your actual base64 encoded API key

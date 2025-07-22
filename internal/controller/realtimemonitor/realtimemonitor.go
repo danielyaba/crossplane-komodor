@@ -423,19 +423,20 @@ func handleGetMonitorError(ctx context.Context, cr *v1alpha1.RealtimeMonitor, ex
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	// Check if this is a 400 Bad Request with an invalid external name (not a UUID)
+	// Check if this is a 400 Bad Request or 403 Forbidden with an invalid external name (not a UUID)
 	// This happens when Crossplane automatically sets external-name to the Kubernetes resource name
-	if strings.Contains(err.Error(), "400 Bad Request") {
+	if strings.Contains(err.Error(), "400 Bad Request") || strings.Contains(err.Error(), "403 Forbidden") {
 		if !isValidUUID(extName) {
-			logger.Info("400 Bad Request with invalid external name (not UUID), clearing external name to trigger creation",
+			logger.Info("400/403 error with invalid external name (not UUID), clearing external name to trigger creation",
 				"externalName", extName,
-				"resourceName", cr.Name)
+				"resourceName", cr.Name,
+				"error", err.Error())
 			// Clear the incorrect external name to allow recreation
 			meta.SetExternalName(cr, "")
 			return managed.ExternalObservation{ResourceExists: false}, nil
 		} else {
-			// Valid UUID but still getting 400 - this might be a different issue
-			logger.Error(err, "400 Bad Request with valid UUID - this might indicate a different issue",
+			// Valid UUID but still getting 400/403 - this might be a different issue
+			logger.Error(err, "400/403 error with valid UUID - this might indicate a different issue",
 				"externalName", extName,
 				"resourceName", cr.Name)
 		}
@@ -537,7 +538,6 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	// Validate clusters
-	logger.Info("Validating cluster existence in Komodor")
 	if err := c.validateClusters(ctx, specData.sensors, cr, logger); err != nil {
 		return managed.ExternalCreation{}, err
 	}

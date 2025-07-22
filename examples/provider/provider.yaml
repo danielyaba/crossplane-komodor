@@ -1,0 +1,6 @@
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: crossplane-komodor
+spec:
+  package: "docker.io/danielyaba/crossplane-komodor:v1.0.0" 
