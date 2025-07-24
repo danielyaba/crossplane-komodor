@@ -63,4 +63,4 @@ spec:
         - "recovery"
       escalateTo:
         - "oncall"
-        - "manager" 
+        - "manager"

@@ -22,4 +22,4 @@ spec:
       - "critical"
       - "app-health"
   providerConfigRef:
-    name: komodor-provider-config 
+    name: komodor-provider-config

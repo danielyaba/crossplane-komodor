@@ -1,10 +1,7 @@
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: crossplane-komodor
-  labels:
-    app: crossplane-komodor
+  name: provider-komodor
 rules:
 - apiGroups: ["komodor.komodor.crossplane.io"]
   resources: ["realtimemonitors"]
@@ -17,19 +14,4 @@ rules:
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["events", "secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: crossplane-komodor
-  labels:
-    app: crossplane-komodor
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: crossplane-komodor
-subjects:
-- kind: ServiceAccount
-  name: crossplane
-  namespace: crossplane-system 
+  verbs: ["get", "list", "watch", "create", "update", "patch"] 

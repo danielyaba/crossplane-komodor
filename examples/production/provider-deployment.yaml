@@ -60,4 +60,4 @@ spec:
         runAsGroup: 1000
       terminationGracePeriodSeconds: 30
 # Using default crossplane service account instead of custom one
-# RBAC is defined in examples/production/rbac.yaml 
+# RBAC is defined in examples/production/rbac.yaml
