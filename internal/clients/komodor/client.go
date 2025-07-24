@@ -316,4 +316,3 @@ type Monitor struct {
 	Variables    map[string]interface{}   `json:"variables,omitempty"`
 	SinksOptions map[string][]string      `json:"sinksOptions,omitempty"`
 }
- 
