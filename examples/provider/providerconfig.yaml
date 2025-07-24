@@ -8,4 +8,4 @@ spec:
     secretRef:
       namespace: crossplane-system
       name: komodor-api-key
-      key: apiKey 
+      key: apiKey

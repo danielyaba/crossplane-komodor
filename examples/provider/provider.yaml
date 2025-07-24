@@ -3,4 +3,4 @@ kind: Provider
 metadata:
   name: crossplane-komodor
 spec:
-  package: "docker.io/danielyaba/crossplane-komodor:v1.0.0" 
+  package: "docker.io/danielyaba/crossplane-komodor:v1.0.0"

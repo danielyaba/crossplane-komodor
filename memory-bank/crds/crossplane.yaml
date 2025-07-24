@@ -6,5 +6,4 @@ metadata:
     meta.crossplane.io/maintainer: Crossplane Maintainers <info@crossplane.io>
     meta.crossplane.io/source: github.com/crossplane/provider-komodor
     meta.crossplane.io/license: Apache-2.0
-    meta.crossplane.io/description: |
-      A komodor that can be used to create Crossplane providers.
+    meta.crossplane.io/description: A komodor that can be used to create Crossplane providers.
