@@ -4,6 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
+    crossplane.io/rbac-manager: "true"
+    crossplane.io/rbac-permissions: |
+      - apiGroups: ["komodor.crossplane.io"]
+        resources: ["providerconfigs"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["secrets"]
+        verbs: ["get", "list", "watch"]
   name: providerconfigs.komodor.crossplane.io
 spec:
   group: komodor.crossplane.io

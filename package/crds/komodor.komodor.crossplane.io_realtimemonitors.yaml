@@ -4,6 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
+    crossplane.io/rbac-manager: "true"
+    crossplane.io/rbac-permissions: |
+      - apiGroups: ["komodor.komodor.crossplane.io"]
+        resources: ["realtimemonitors"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: ["komodor.komodor.crossplane.io"]
+        resources: ["realtimemonitors/status"]
+        verbs: ["get", "update", "patch"]
+      - apiGroups: ["komodor.crossplane.io"]
+        resources: ["providerconfigs", "providerconfigusages"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["events", "secrets"]
+        verbs: ["get", "list", "watch", "create", "update", "patch"]
   name: realtimemonitors.komodor.komodor.crossplane.io
 spec:
   group: komodor.komodor.crossplane.io

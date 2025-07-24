@@ -94,6 +94,10 @@ type RealtimeMonitorStatus struct {
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories={crossplane,managed,komodor}
+// +kubebuilder:rbac:groups=komodor.komodor.crossplane.io,resources=realtimemonitors,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=komodor.komodor.crossplane.io,resources=realtimemonitors/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=komodor.crossplane.io,resources=providerconfigs;providerconfigusages,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events;secrets,verbs=get;list;watch;create;update;patch
 type RealtimeMonitor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
