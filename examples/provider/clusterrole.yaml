@@ -5,15 +5,48 @@ metadata:
   labels:
     app: crossplane-komodor
 rules:
-- apiGroups: ["komodor.komodor.crossplane.io"]
-  resources: ["realtimemonitors"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["komodor.komodor.crossplane.io"]
-  resources: ["realtimemonitors/status"]
-  verbs: ["get", "update", "patch"]
-- apiGroups: ["komodor.crossplane.io"]
-  resources: ["providerconfigs", "providerconfigusages"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: [""]
-  resources: ["events", "secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"] 
+- apiGroups:
+    - komodor.komodor.crossplane.io
+  resources:
+    - realtimemonitors
+  verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+- apiGroups:
+    - komodor.komodor.crossplane.io
+  resources:
+    - realtimemonitors/status
+  verbs:
+    - get
+    - update
+    - patch
+- apiGroups:
+    - komodor.crossplane.io
+  resources:
+    - providerconfigs
+    - providerconfigusages
+  verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+- apiGroups:
+    - ""
+  resources:
+    - events
+    - secrets
+  verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch 
